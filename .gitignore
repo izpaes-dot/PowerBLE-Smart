@@ -1,3 +1,13 @@
 !native/
 !native/android/
 !native/android/*.kt
+
+node_modules/
+dist/
+android/.gradle/
+android/build/
+android/app/build/
+.gradle/
+android/local.properties
+PowerBLE-Smart-DIAGNOSTICO-v1.1.zip
+dist/
