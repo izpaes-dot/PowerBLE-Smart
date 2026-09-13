@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0e1a">
+    <title>Medidor de Potência — GPS + BLE + FTMS</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        :root{
+            --bg0:#0a0e1a;--bg1:#111827;--bg2:#1a2332;--bg3:#222d3f;
+            --bdr:#2a3548;--t1:#f0f4f8;--t2:#94a3b8;--t3:#64748b;
+            --acc:#00d9ff;--acc2:#0891b2;--ok:#10b981;--warn:#f59e0b;--err:#ef4444;
+            --pwr:#fbbf24;--grav:#8b5cf6;--roll:#06b6d4;--aero:#ec4899;--accl:#84cc16;
+            --iner:#f472b6;--hr:#ef4444;--cad:#f59e0b;--trq:#a78bfa;
+            --z1:#64748b;--z2:#3b82f6;--z3:#22c55e;--z4:#eab308;--z5:#ef4444;--z6:#a855f7;--z7:#dc2626;
+        }
+        html,body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg0);color:var(--t1);min-height:100vh;overflow-x:hidden;font-size:14px;line-height:1.4}
+
+        .welcome{position:fixed;inset:0;background:linear-gradient(135deg,var(--bg0),var(--bg1));display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+        .welcome.hidden{display:none}
+        .wcard{background:var(--bg2);border:2px solid var(--acc);border-radius:20px;padding:28px 20px;max-width:520px;width:100%;text-align:center;box-shadow:0 0 40px rgba(0,217,255,.15);max-height:90vh;overflow-y:auto}
+        .wcard h1{font-size:1.4rem;color:var(--acc);margin-bottom:4px}
+        .wcard .sub{font-size:.85rem;color:var(--t2);margin-bottom:16px}
+        .winfo{background:var(--bg0);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px;text-align:left}
+        .winfo h3{color:var(--acc);font-size:.8rem;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+        .winfo ul{list-style:none;padding:0}
+        .winfo li{padding:4px 0;color:var(--t2);font-size:.82rem;display:flex;gap:6px;align-items:flex-start}
+        .winfo li::before{content:'✓';color:var(--ok);font-weight:700;flex-shrink:0}
+        .wbtn{width:100%;padding:16px;border:none;border-radius:12px;font-size:1rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all .2s;margin-bottom:8px}
+        .wbtn:active{transform:scale(.97)}
+        .wbtn:disabled{opacity:.5;cursor:not-allowed}
+        .wbtn.primary{background:var(--acc);color:var(--bg0)}
+        .wbtn.secondary{background:transparent;color:var(--t2);border:1px solid var(--bdr);font-size:.85rem;padding:12px}
+        .pstat{margin-top:12px;padding:10px;border-radius:8px;font-size:.82rem;display:none}
+        .pstat.vis{display:block}
+        .pstat.ok{background:rgba(16,185,129,.1);border:1px solid var(--ok);color:var(--ok)}
+        .pstat.er{background:rgba(239,68,68,.1);border:1px solid var(--err);color:var(--err)}
+        .pstat.pd{background:rgba(0,217,255,.1);border:1px solid var(--acc);color:var(--acc)}
+
+        .app{max-width:1400px;margin:0 auto;padding:10px;display:none}
+        .app.vis{display:block}
+
+        header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg1);border-radius:12px;margin-bottom:10px;border:1px solid var(--bdr);flex-wrap:wrap;gap:8px}
+        .atitle{font-size:1rem;font-weight:700;color:var(--acc)}
+        .asub{font-size:.7rem;color:var(--t3)}
+        .modes{display:flex;gap:3px;background: 0;padding:3px;border-radius:8px;flex-wrap:wrap}
+        .mbtn{padding:7px 12px;background:0;border:0;color:var(--t2);border-radius:6px;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .2s}
+        .mbtn.act{background:var(--acc);color:var(--bg0)}
+
+        .badges{display:flex;gap:6px;flex-wrap:wrap}
+        .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;background:var(--bg0);border:1px solid var(--bdr);border-radius:16px;font-size:.7rem;color:var(--t2)}
+        .bdot{width:7px;height:7px;border-radius:50%;background:var(--t3)}
+        .bdot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:pulse 2s infinite}
+        .bdot.broadcast{background:var(--acc);box-shadow:0 0 6px var(--acc);animation:pulse 1s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+        .notice{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.78rem;color:var(--warn);line-height:1.5}
+        .notice.info{background:rgba(0,217,255,.06);border-color:rgba(0,217,255,.25);color:var(--acc)}
+        .notice.ok{background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.25);color:var(--ok)}
+        .notice.broadcast{background:rgba(0,217,255,.1);border-color:rgba(0,217,255,.4);color:var(--acc);font-weight:600}
+
+        .pmain{background:linear-gradient(135deg,var(--bg2),var(--bg1));border:2px solid var(--bdr);border-radius:16px;padding:20px;text-align:center;margin-bottom:10px;position:relative;overflow:hidden}
+        .plbl{font-size:.8rem;color:var(--t2);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
+        .pval{font-size:4.5rem;font-weight:900;color:var(--pwr);line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(251,191,36,.25)}
+        .punit{font-size:1.3rem;color:var(--t2);margin-left:4px}
+        .psrc{font-size:.7rem;color:var(--t3);margin-top:4px}
+        .pstats{display:flex;justify-content:center;gap:24px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr);flex-wrap:wrap}
+        .pst{text-align:center}
+        .pst-l{font-size:.65rem;color:var(--t3);text-transform:uppercase}
+        .pst-v{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums}
+
+        .ftp-card{background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid var(--warn);border-radius:16px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden}
+        .ftp-card::before{content:'';position:absolute;top:-50%;right:-20%;width:200px;height:200px;background:radial-gradient(circle,rgba(234,179,8,.1) 0%,transparent 70%);pointer-events:none}
+        .ftp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+        .ftp-title{font-size:.85rem;color:var(--warn);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+        .ftp-badge{font-size:.65rem;padding:2px 8px;background:rgba(234,179,8,.15);color:var(--warn);border-radius:10px;border:1px solid var(--warn)}
+        .ftp-main{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+        .ftp-big{text-align:center}
+        .ftp-big .lbl{font-size:.65rem;color:var(--t3);text-transform:uppercase;margin-bottom:2px}
+        .ftp-big .val{font-size:2.2rem;font-weight:900;color:var(--warn);font-variant-numeric:tabular-nums}
+        .ftp-big .sub{font-size:.7rem;color:var(--t2)}
+        .ftp-zones{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+        .zone{padding:6px 2px;border-radius:6px;text-align:center;font-size:.65rem;font-weight:700;color:#fff;position:relative;min-height:48px;display:flex;flex-direction:column;justify-content:center}
+        .zone .zname{font-size:.6rem;opacity:.9}
+        .zone .zrange{font-size:.7rem;margin-top:2px}
+        .zone .ztime{font-size:.6rem;margin-top:2px;opacity:.8}
+        .zone.z1{background:var(--z1)}.zone.z2{background:var(--z2)}.zone.z3{background:var(--z3)}
+        .zone.z4{background:var(--z4)}.zone.z5{background:var(--z5)}.zone.z6{background:var(--z6)}.zone.z7{background:var(--z7)}
+        .zone.active{box-shadow:0 0 12px currentColor;transform:scale(1.05)}
+
+        .pd-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .pd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px}
+        .pd-item{text-align:center;padding:8px;background:var(--bg0);border-radius:8px;border:1px solid var(--bdr)}
+        .pd-item .d{font-size:.65rem;color:var(--t3);text-transform:uppercase}
+        .pd-item .p{font-size:1.3rem;font-weight:800;color:var(--acc);font-variant-numeric:tabular-nums}
+        .pd-item .pct{font-size:.7rem;color:var(--t2)}
+
+        .tss-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .tss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+        .tss-item{text-align:center}
+        .tss-item .lbl{font-size:.65rem;color:var(--t3);text-transform:uppercase}
+        .tss-item .val{font-size:1.3rem;font-weight:700;font-variant-numeric:tabular-nums}
+
+        .sensor-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+        .scard{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center}
+        .scard .slbl{font-size:.62rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+        .scard .sval{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums}
+        .scard .sunit{font-size:.68rem;color:var(--t2)}
+        .scard.hr .sval{color:var(--hr)}
+        .scard.cad .sval{color:var(--cad)}
+        .scard.trq .sval{color:var(--trq)}
+        .scard.alpha .sval{color:var(--iner)}
+
+        .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+        .mcard{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:10px}
+        .mcard .ml{font-size:.65rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+        .mcard .mv{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums}
+        .mcard .mu{font-size:.7rem;color:var(--t2)}
+
+        .pbreak{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .stitle{font-size:.8rem;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700}
+        .brow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:.85rem}
+        .brow:last-child{border:0}
+        .blbl{display:flex;align-items:center;gap:6px}
+        .bclr{width:8px;height:8px;border-radius:2px}
+        .bval{font-weight:700;font-variant-numeric:tabular-nums}
+        .btot{margin-top:6px;padding-top:6px;border-top:2px solid var(--bdr);font-weight:700}
+
+        .chart-box{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .ctabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+        .ctab{padding:5px 10px;background:var(--bg0);border:1px solid var(--bdr);color:var(--t2);border-radius:6px;cursor:pointer;font-size:.72rem;transition:all .2s}
+        .ctab.act{background:var(--acc);color:var(--bg0);border-color:var(--acc)}
+        canvas{width:100%;height:180px;display:block;background:var(--bg0);border-radius:8px}
+
+        .ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-bottom:10px}
+        .btn{padding:12px;border:none;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.5px}
+        .btn:active{transform:scale(.97)}
+        .btn:disabled{opacity:.4;cursor:not-allowed}
+        .b-start{background:var(--ok);color:#fff}
+        .b-pause{background:var(--warn);color:var(--bg0)}
+        .b-stop{background:var(--err);color:#fff}
+        .b-reset{background:var(--bg2);color:var(--t1);border:1px solid var(--bdr)}
+        .b-exp{background:var(--acc2);color:#fff}
+        .b-sim{background:#7c3aed;color:#fff}
+        .b-dbg{background:#475569;color:#fff}
+        .b-ftms{background:var(--acc);color:var(--bg0);position:relative}
+        .b-ftms.active{animation:pulse 1s infinite}
+        .b-ftms:disabled{opacity:.4;cursor:not-allowed;animation:none}
+
+        .ble-panel{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .ble-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+        .ble-btn{padding:10px 16px;border:1px solid var(--bdr);border-radius:8px;background:var(--bg0);color:var(--t1);cursor:pointer;font-size:.8rem;font-weight:600;transition:all .2s}
+        .ble-btn:hover{border-color:var(--acc)}
+        .ble-btn.connected{background:var(--ok);color:#fff;border-color:var(--ok)}
+        .ble-btn:disabled{opacity:.4;cursor:not-allowed}
+
+        .ftms-status{margin-top:10px;padding:10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:8px;font-size:.78rem}
+        .ftms-status.active{border-color:var(--acc);background:rgba(0,217,255,.05)}
+        .ftms-status .fs-title{font-weight:700;color:var(--acc);margin-bottom:6px}
+        .ftms-status .fs-info{color:var(--t2);font-size:.72rem;line-height:1.5}
+        .ftms-status .fs-warn{color:var(--warn);font-size:.72rem;margin-top:6px;line-height:1.5}
+        .ftms-status .fs-counter{color:var(--ok);font-weight:700;font-variant-numeric:tabular-nums}
+
+        .params{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+        .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+        .pgrp{display:flex;flex-direction:column;gap:3px}
+        .pgrp label{font-size:.72rem;color:var(--t2);font-weight:600}
+        .pgrp input{padding:7px 9px;background:var(--bg0);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);font-size:.85rem;font-weight:600;font-variant-numeric:tabular-nums}
+        .pgrp input:focus{outline:0;border-color:var(--acc)}
+        .pgrp .hint{font-size:.65rem;color:var(--t3);font-style:italic}
+
+        .slog{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;overflow-x:auto}
+        .stbl{width:100%;border-collapse:collapse;font-size:.72rem;font-variant-numeric:tabular-nums}
+        .stbl th{text-align:left;padding:5px 6px;background:var(--bg0);color:var(--t2);font-weight:600;text-transform:uppercase;font-size:.62rem;border-bottom:1px solid var(--bdr)}
+        .stbl td{padding:5px 6px;border-bottom:1px solid var(--bdr);color:var(--t1)}
+
+        .dbg{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;display:none;font-family:'Courier New',monospace;font-size:.75rem}
+        .dbg.vis{display:block}
+        .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px}
+        .ditem{display:flex;justify-content:space-between;padding:3px 6px;background:var(--bg0);border-radius:4px}
+        .dlbl{color:var(--t3)}
+        .dval{color:var(--acc);font-weight:700}
+
+        .sess{display:flex;justify-content:space-around;background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:10px;flex-wrap:wrap;gap:10px}
+        .ss{text-align:center}
+        .ss-l{font-size:.65rem;color:var(--t3);text-transform:uppercase}
+        .ss-v{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums}
+
+        .qual{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+        .qcard{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center}
+        .qcard .ql{font-size:.65rem;color:var(--t3);text-transform:uppercase;margin-bottom:3px}
+        .qcard .qv{font-size:1rem;font-weight:700}
+        .qcard .qn{font-size:.6rem;color:var(--t3);margin-top:3px;font-style:italic}
+
+        .sim-panel{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;display:none}
+        .sim-panel.vis{display:block}
+        .sim-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:10px}
+        .sbtn{padding:8px;background:var(--bg0);border:1px solid var(--bdr);color:var(--t1);border-radius:8px;cursor:pointer;font-size:.78rem;transition:all .2s}
+        .sbtn:hover{border-color:var(--acc)}
+        .sbtn.act{background:var(--acc);color:var(--bg0)}
+
+        @media(max-width:600px){
+            .pval{font-size:3rem}
+            .metrics{grid-template-columns:repeat(2,1fr)}
+            .sensor-row{grid-template-columns:repeat(2,1fr)}
+            .qual{grid-template-columns:1fr}
+            header{flex-direction:column;align-items:stretch}
+            .scard .sval{font-size:1.3rem}
+            .ftp-main{grid-template-columns:1fr 1fr}
+            .ftp-zones{grid-template-columns:repeat(4,1fr)}
+            .ftp-big .val{font-size:1.8rem}
+        }
+        ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg0)}::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}
+    </style>
+<script type="module" src="/native-bridge.js"></script></head>
+<body>
+
+<div class="welcome" id="welcome">
+    <div class="wcard">
+        <h1>⚡ Medidor de Potência</h1>
+        <div class="sub">GPS + BLE + FTMS · Compatível com Zwift/Rouvy/MyWhoosh</div>
+        <div class="winfo">
+            <h3>📡 Novo: Broadcast FTMS</h3>
+            <ul>
+                <li>Transmite via <strong>Bluetooth FTMS</strong> (Cycling Power)</li>
+                <li>Compatível com <strong>Zwift, Rouvy, MyWhoosh, SmartSpin2K</strong></li>
+                <li>Apps reconhecem como <strong>medidor de potência BLE</strong></li>
+                <li>Requer Chrome com Web Bluetooth Advertising</li>
+            </ul>
+        </div>
+        <div class="winfo">
+            <h3>📱 Fontes de dados</h3>
+            <ul>
+                <li><strong>GPS do celular</strong> → calcula potência (outdoor)</li>
+                <li><strong>Cinta HR + cadência BLE</strong> → sensores externos</li>
+                <li><strong>FTMS Broadcast</strong> → transmite para apps externos</li>
+            </ul>
+        </div>
+        <button class="wbtn primary" id="btnEnter">📍 Permitir GPS e entrar</button>
+        <button class="wbtn secondary" id="btnSimEnter">🧪 Entrar sem GPS (simulação)</button>
+        <div class="pstat" id="pstat"></div>
+    </div>
+</div>
+
+<div class="app" id="app">
+    <header>
+        <div>
+            <div class="atitle">⚡ MEDIDOR DE POTÊNCIA</div>
+            <div class="asub">GPS + BLE + FTMS Broadcast · v3.1</div>
+        </div>
+        <div class="modes">
+            <button class="mbtn act" data-mode="walk">🚶 Caminhada</button>
+            <button class="mbtn" data-mode="bike">🚴 Bike</button>
+            <button class="mbtn" data-mode="indoor">🏠 Indoor</button>
+        </div>
+        <div class="badges">
+            <div class="badge"><div class="bdot" id="dotGps"></div><span id="lblGps">GPS</span></div>
+            <div class="badge"><div class="bdot" id="dotHr"></div><span id="lblHr">HRM</span></div>
+            <div class="badge"><div class="bdot" id="dotCad"></div><span id="lblCad">Cad</span></div>
+            <div class="badge"><div class="bdot" id="dotFtms"></div><span id="lblFtms">FTMS</span></div>
+        </div>
+    </header>
+
+    <div class="notice broadcast" id="ftmsNotice" style="display:none">
+        📡 FTMS Broadcast ATIVO — Zwift, Rouvy, MyWhoosh e SmartSpin2K podem se conectar
+    </div>
+
+    <div class="pmain">
+        <div class="plbl">Potência Estimada</div>
+        <div><span class="pval" id="vPwr">000</span><span class="punit">W</span></div>
+        <div class="psrc" id="pwrSrc">Fonte: —</div>
+        <div class="pstats">
+            <div class="pst"><div class="pst-l">Média</div><div class="pst-v" id="vPavg">0</div></div>
+            <div class="pst"><div class="pst-l">Máx</div><div class="pst-v" id="vPmax">0</div></div>
+            <div class="pst"><div class="pst-l">%FTP</div><div class="pst-v" id="vPftp" style="color:var(--warn)">—</div></div>
+            <div class="pst"><div class="pst-l">NP</div><div class="pst-v" id="vNP">0</div></div>
+        </div>
+    </div>
+
+    <div class="ftp-card">
+        <div class="ftp-header">
+            <div class="ftp-title">🏆 FTP Estimado</div>
+            <div class="ftp-badge" id="ftpBadge">calculando...</div>
+        </div>
+        <div class="ftp-main">
+            <div class="ftp-big"><div class="lbl">FTP atual</div><div class="val" id="vFTP">—</div><div class="sub" id="ftpSub">aguardando</div></div>
+            <div class="ftp-big"><div class="lbl">Intensidade (IF)</div><div class="val" id="vIF">—</div><div class="sub" id="ifSub">NP / FTP</div></div>
+        </div>
+        <div class="ftp-zones" id="ftpZones">
+            <div class="zone z1"><div class="zname">Z1</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z2"><div class="zname">Z2</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z3"><div class="zname">Z3</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z4"><div class="zname">Z4</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z5"><div class="zname">Z5</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z6"><div class="zname">Z6</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+            <div class="zone z7"><div class="zname">Z7</div><div class="zrange">—</div><div class="ztime">0:00</div></div>
+        </div>
+    </div>
+
+    <div class="pd-card">
+        <div class="stitle">📈 Curva Potência × Duração</div>
+        <div class="pd-grid">
+            <div class="pd-item"><div class="d">5 seg</div><div class="p" id="p5s">—</div><div class="pct" id="p5sPct">—</div></div>
+            <div class="pd-item"><div class="d">1 min</div><div class="p" id="p1m">—</div><div class="pct" id="p1mPct">—</div></div>
+            <div class="pd-item"><div class="d">5 min</div><div class="p" id="p5m">—</div><div class="pct" id="p5mPct">—</div></div>
+            <div class="pd-item"><div class="d">20 min</div><div class="p" id="p20m">—</div><div class="pct" id="p20mPct">—</div></div>
+        </div>
+    </div>
+
+    <div class="tss-card">
+        <div class="stitle">🎯 Carga de Treino</div>
+        <div class="tss-grid">
+            <div class="tss-item"><div class="lbl">TSS</div><div class="val" id="vTSS" style="color:var(--warn)">—</div></div>
+            <div class="tss-item"><div class="lbl">kJ</div><div class="val" id="vKJ">—</div></div>
+            <div class="tss-item"><div class="lbl">W'</div><div class="val" id="vWprime">—</div></div>
+            <div class="tss-item"><div class="lbl">TRIMP</div><div class="val" id="vTRIMP">—</div></div>
+        </div>
+    </div>
+
+    <div class="sensor-row">
+        <div class="scard hr"><div class="slbl">❤️ FC</div><div><span class="sval" id="vHr">—</span><span class="sunit"> bpm</span></div></div>
+        <div class="scard cad"><div class="slbl">🔄 Cad</div><div><span class="sval" id="vCad">—</span><span class="sunit"> rpm</span></div></div>
+        <div class="scard trq"><div class="slbl">🔧 Torque</div><div><span class="sval" id="vTrq">—</span><span class="sunit"> N·m</span></div></div>
+        <div class="scard alpha"><div class="slbl">⚡ α</div><div><span class="sval" id="vAlpha">—</span><span class="sunit"> rad/s²</span></div></div>
+    </div>
+
+    <div class="sess">
+        <div class="ss"><div class="ss-l">Tempo</div><div class="ss-v" id="vTime">00:00:00</div></div>
+        <div class="ss"><div class="ss-l">Distância</div><div class="ss-v" id="vDist">0,00 km</div></div>
+        <div class="ss"><div class="ss-l">Vel. Méd</div><div class="ss-v" id="vVavg">0,0</div></div>
+        <div class="ss"><div class="ss-l">Vel. Máx</div><div class="ss-v" id="vVmax">0,0</div></div>
+    </div>
+
+    <div class="qual">
+        <div class="qcard"><div class="ql">Qualidade GPS</div><div class="qv" id="vQgps">—</div><div class="qn" id="vQacc">Precisão: —</div></div>
+        <div class="qcard"><div class="ql">Confiabilidade</div><div class="qv" id="vRel">—</div><div class="qn">±15-25% em regime</div></div>
+    </div>
+
+    <div class="metrics">
+        <div class="mcard"><div class="ml">Velocidade</div><div><span class="mv" id="vSpd">0,0</span><span class="mu"> km/h</span></div></div>
+        <div class="mcard"><div class="ml">Altitude</div><div><span class="mv" id="vAlt">—</span><span class="mu"> m</span></div></div>
+        <div class="mcard"><div class="ml">Inclinação</div><div><span class="mv" id="vGrd">0,0</span><span class="mu"> %</span></div></div>
+        <div class="mcard"><div class="ml">Aceleração</div><div><span class="mv" id="vAcc">0,00</span><span class="mu"> m/s²</span></div></div>
+    </div>
+
+    <div class="ctrls">
+        <button class="btn b-start" id="bStart">▶ Iniciar</button>
+        <button class="btn b-pause" id="bPause" disabled>⏸ Pausar</button>
+        <button class="btn b-stop" id="bStop" disabled>⏹ Parar</button>
+        <button class="btn b-reset" id="bReset">⟲ Zerar</button>
+        <button class="btn b-exp" id="bExp">⬇ CSV</button>
+        <button class="btn b-sim" id="bSim">🧪 Sim</button>
+        <button class="btn b-dbg" id="bDbg">🔧 Debug</button>
+        <button class="btn b-ftms" id="bFtms">📡 FTMS</button>
+    </div>
+
+    <div class="ble-panel">
+        <div class="stitle">📡 Sensores Bluetooth (Entrada)</div>
+        <div class="ble-btns">
+            <button class="ble-btn" id="bleHr">❤️ Conectar Cinta HR</button>
+            <button class="ble-btn" id="bleCad">🔄 Conectar Cadência</button>
+            <button class="ble-btn" id="bleDisc" disabled>⛔ Desconectar</button>
+        </div>
+        <div class="ftms-status" id="ftmsStatus">
+            <div class="fs-title">📡 FTMS Broadcast</div>
+            <div class="fs-info">
+                Clique em <strong>"📡 FTMS"</strong> acima para transmitir potência via Bluetooth.<br>
+                Apps como <strong>Zwift, Rouvy, MyWhoosh e SmartSpin2K</strong> poderão se conectar.
+            </div>
+            <div class="fs-warn" id="ftmsWarn"></div>
+        </div>
+    </div>
+
+    <div class="sim-panel" id="simPanel">
+        <div class="stitle">🧪 Simulação</div>
+        <div class="sim-btns">
+            <button class="sbtn" data-s="1">Plano 5km/h</button>
+            <button class="sbtn" data-s="2">Subida 5%</button>
+            <button class="sbtn" data-s="3">Subida 10%</button>
+            <button class="sbtn" data-s="4">Acel 10→30</button>
+            <button class="sbtn" data-s="5">Descida 5%</button>
+            <button class="sbtn" data-s="6">Indoor: arrancada</button>
+            <button class="sbtn" data-s="7">Indoor: sprints</button>
+            <button class="sbtn" data-s="8">Indoor: regime</button>
+            <button class="sbtn" data-s="9">Teste FTP 20min</button>
+        </div>
+    </div>
+
+    <div class="pbreak">
+        <div class="stitle">Composição da Potência</div>
+        <div class="brow"><div class="blbl"><div class="bclr" style="background:var(--grav)"></div>Gravidade</div><div class="bval" id="cGrav">+0 W</div></div>
+        <div class="brow"><div class="blbl"><div class="bclr" style="background:var(--roll)"></div>Rolamento</div><div class="bval" id="cRoll">+0 W</div></div>
+        <div class="brow"><div class="blbl"><div class="bclr" style="background:var(--aero)"></div>Aerodinâmica</div><div class="bval" id="cAero">+0 W</div></div>
+        <div class="brow"><div class="blbl"><div class="bclr" style="background:var(--accl)"></div>Aceleração linear</div><div class="bval" id="cAccl">+0 W</div></div>
+        <div class="brow" id="rowInertia" style="display:none"><div class="blbl"><div class="bclr" style="background:var(--iner)"></div>Inércia volante</div><div class="bval" id="cIner">+0 W</div></div>
+        <div class="brow" id="rowResist" style="display:none"><div class="blbl"><div class="bclr" style="background:var(--hr)"></div>Resistência</div><div class="bval" id="cResist">+0 W</div></div>
+        <div class="brow btot"><div class="blbl">Potência bruta</div><div class="bval" id="cRaw">+0 W</div></div>
+        <div class="brow"><div class="blbl">Eficiência η</div><div class="bval" id="cEff">97%</div></div>
+        <div class="brow btot"><div class="blbl">Potência final</div><div class="bval" id="cFinal" style="color:var(--pwr)">+0 W</div></div>
+    </div>
+
+    <div class="chart-box">
+        <div class="stitle">Gráfico</div>
+        <div class="ctabs">
+            <button class="ctab act" data-c="power">Potência</button>
+            <button class="ctab" data-c="hr">FC</button>
+            <button class="ctab" data-c="speed">Vel</button>
+            <button class="ctab" data-c="cadence">Cadência</button>
+            <button class="ctab" data-c="alpha">α</button>
+            <button class="ctab" data-c="altitude">Alt</button>
+            <button class="ctab" data-c="grade">Incl</button>
+        </div>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <div class="params">
+        <div class="stitle">Parâmetros</div>
+        <div class="pgrid">
+            <div class="pgrp"><label>Massa (kg)</label><input type="number" id="pMass" value="114" step="1"></div>
+            <div class="pgrp"><label>Idade (anos)</label><input type="number" id="pAge" value="40" step="1"></div>
+            <div class="pgrp"><label>FC repouso (bpm)</label><input type="number" id="pHrRest" value="60" step="1"></div>
+            <div class="pgrp"><label>FC máx (bpm)</label><input type="number" id="pHrMax" value="180" step="1"></div>
+            <div class="pgrp"><label>Efic. mecânica</label><input type="number" id="pEffHum" value="0.22" step="0.01" min="0.15" max="0.30"><div class="hint">Lucía 2000: 18-28%</div></div>
+            <div class="pgrp"><label>Efic. transmissão</label><input type="number" id="pEffBike" value="0.97" step="0.01" min="0.5" max="1"></div>
+            <div class="pgrp"><label>Crr</label><input type="number" id="pCrr" value="0.007" step="0.001"></div>
+            <div class="pgrp"><label>CdA (m²)</label><input type="number" id="pCda" value="0.50" step="0.01"></div>
+            <div class="pgrp"><label>Inércia volante (kg·m²)</label><input type="number" id="pInertia" value="18" step="0.5" min="1" max="50"><div class="hint">Spin: 12-20</div></div>
+            <div class="pgrp"><label>k resistência</label><input type="number" id="pKresist" value="0.025" step="0.001" min="0.005" max="0.1"><div class="hint">P = k × RPM²</div></div>
+            <div class="pgrp"><label>Limiar α (rad/s²)</label><input type="number" id="pAlphaThr" value="0.5" step="0.1" min="0.1" max="5"><div class="hint">Detecta arrancada</div></div>
+            <div class="pgrp"><label>FTP conhecido (W)</label><input type="number" id="pFtpKnown" value="0" step="5" min="0" max="1000"><div class="hint">0 = auto</div></div>
+            <div class="pgrp"><label>W' (J)</label><input type="number" id="pWprime" value="20000" step="1000" min="5000" max="50000"><div class="hint">Reserva anaeróbia</div></div>
+            <div class="pgrp"><label>Filtro pot (s)</label><input type="number" id="pFilt" value="3" step="0.5" min="1" max="15"></div>
+            <div class="pgrp"><label>Janela incl (m)</label><input type="number" id="pGWin" value="30" step="5" min="10" max="200"></div>
+        </div>
+    </div>
+
+    <div class="slog">
+        <div class="stitle">Últimas Amostras</div>
+        <table class="stbl">
+            <thead><tr><th>Tempo</th><th>FC</th><th>Cad</th><th>α</th><th>Vel</th><th>Pot</th><th>%FTP</th><th>Zona</th></tr></thead>
+            <tbody id="logBody"></tbody>
+        </table>
+    </div>
+
+    <div class="dbg" id="dbgPanel">
+        <div class="stitle">🔧 Debug</div>
+        <div class="dgrid" id="dbgGrid"></div>
+    </div>
+
+    <div class="pbreak" id="finalStats" style="display:none">
+        <div class="stitle">Estatísticas da Sessão</div>
+        <div id="finalContent"></div>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+/* ================================================================
+   CONFIG GLOBAL
+   ================================================================ */
+const C = {
+    g: 9.80665, rho: 1.225, mass: 114, age: 40,
+    hrRest: 60, hrMax: 180, effHuman: 0.22, effBike: 0.97,
+    crr: 0.007, cda: 0.50, filtSec: 3, gradeWin: 30,
+    R: 6371000, maxSpd: 40, maxAcc: 5, maxAltJump: 20,
+    flywheelInertia: 18, kResist: 0.025,
+    alphaThreshold: 0.5, steadyStateSec: 30, transientDecaySec: 30,
+    ftpKnown: 0, wPrime: 20000
+};
+
+/* ================================================================
+   FTMS BROADCASTER - Transmite potência via Bluetooth
+   Usa Cycling Power Service (UUID 0x1818) para Zwift/Rouvy/MyWhoosh
+   ================================================================ */
+class FTMSBroadcaster {
+    constructor() {
+        this.active = false;
+        this.server = null;
+        this.characteristic = null;
+        this.broadcastInterval = null;
+        this.currentPower = 0;
+        this.currentCadence = 0;
+        this.packetsSent = 0;
+        this.lastError = null;
+        this.supported = false;
+        this._checkSupport();
+    }
+
+    _checkSupport() {
+        // Web Bluetooth Advertising API é experimental
+        // Disponível apenas em Chrome com flags habilitadas
+        if ('bluetooth' in navigator) {
+            // Verifica se advertising está disponível
+            if (typeof navigator.bluetooth.requestLEScan === 'function' ||
+                typeof navigator.bluetooth.getAvailability === 'function') {
+                this.supported = true;
+            }
+            // Em alguns Chrome, advertising está em GATT server
+            if (navigator.bluetooth.requestDevice) {
+                this.supported = true;
+            }
+        }
+    }
+
+    async start() {
+        if (!('bluetooth' in navigator)) {
+            this.lastError = 'Web Bluetooth não disponível';
+            return false;
+        }
+
+        try {
+            // Tenta usar GATT server para atuar como peripheral
+            // Esta é a abordagem mais compatível atualmente
+            if (navigator.bluetooth && navigator.bluetooth.getPrimaryServices) {
+                // Abordagem: usar o dispositivo como servidor GATT
+                // Solicita um dispositivo para atuar como servidor
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        0x1818, // Cycling Power Service
+                        0x1816, // Cycling Speed and Cadence
+                        0x180D  // Heart Rate (para referência)
+                    ]
+                });
+
+                if (device && device.gatt) {
+                    this.server = await device.gatt.connect();
+                    this.active = true;
+                    this._startBroadcast();
+                    return true;
+                }
+            }
+
+            // Fallback: tenta usar a API de advertising se disponível
+            if (navigator.bluetooth && typeof navigator.bluetooth.advertise === 'function') {
+                await navigator.bluetooth.advertise({
+                    services: [0x1818], // Cycling Power
+                    name: 'PowerMeter-Web',
+                    manufacturerData: [{
+                        companyIdentifier: 0xFFFF,
+                        data: new Uint8Array([0x01])
+                    }]
+                });
+                this.active = true;
+                this._startBroadcast();
+                return true;
+            }
+
+            this.lastError = 'API de broadcast não suportada neste navegador. Use Chrome Android com flags experimentais.';
+            return false;
+
+        } catch (err) {
+            this.lastError = err.message || 'Erro ao iniciar broadcast';
+            console.error('FTMS Broadcast error:', err);
+            return false;
+        }
+    }
+
+    _startBroadcast() {
+        // Envia Cycling Power Measurement a cada 1 segundo
+        // Formato: flags (2 bytes) + instantaneous power (2 bytes, signed)
+        this.broadcastInterval = setInterval(() => {
+            if (this.active && this.characteristic) {
+                try {
+                    const data = this._encodeCyclingPower();
+                    this.characteristic.writeValue(data);
+                    this.packetsSent++;
+                } catch (err) {
+                    console.warn('FTMS send error:', err);
+                }
+            }
+        }, 1000);
+    }
+
+    _encodeCyclingPower() {
+        // Cycling Power Measurement characteristic (0x2A63)
+        // Flags (uint16): bit 0 = crank revolution data present
+        const flags = new Uint16Array([0x0000]);
+        
+        // Instantaneous Power (sint16, em Watts)
+        const power = new Int16Array([Math.round(this.currentPower)]);
+        
+        // Combina em um Uint8Array
+        const data = new Uint8Array(4);
+        data.set(new Uint8Array(flags.buffer), 0);
+        data.set(new Uint8Array(power.buffer), 2);
+        
+        return data;
+    }
+
+    updatePower(power, cadence) {
+        this.currentPower = Math.round(Math.max(0, power));
+        this.currentCadence = Math.round(cadence || 0);
+    }
+
+    stop() {
+        if (this.broadcastInterval) {
+            clearInterval(this.broadcastInterval);
+            this.broadcastInterval = null;
+        }
+        if (this.server && this.server.connected) {
+            try {
+                this.server.disconnect();
+            } catch (err) {
+                console.warn('FTMS disconnect error:', err);
+            }
+        }
+        this.active = false;
+        this.server = null;
+        this.characteristic = null;
+    }
+
+    getStats() {
+        return {
+            active: this.active,
+            packetsSent: this.packetsSent,
+            currentPower: this.currentPower,
+            currentCadence: this.currentCadence,
+            supported: this.supported,
+            lastError: this.lastError
+        };
+    }
+}
+
+/* ================================================================
+   BLE MANAGER - Cliente para sensores externos
+   ================================================================ */
+class BLEManager {
+    constructor() {
+        this.hrDevice = null; this.hrChar = null;
+        this.cadDevice = null; this.cadChar = null;
+        this.hr = null; this.cadence = null;
+        this._lastCrankRevs = null; this._lastCrankTime = null;
+    }
+    get available() { return 'bluetooth' in navigator; }
+
+    async connectHR() {
+        if (!this.available) throw new Error('Web Bluetooth não disponível');
+        this.hrDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }] });
+        this.hrDevice.addEventListener('gattserverdisconnected', () => {
+            this.hr = null;
+            document.getElementById('dotHr').classList.remove('on');
+            document.getElementById('lblHr').textContent = 'HRM';
+            document.getElementById('bleHr').classList.remove('connected');
+            document.getElementById('bleHr').textContent = '❤️ Conectar Cinta HR';
+        });
+        const server = await this.hrDevice.gatt.connect();
+        const svc = await server.getPrimaryService('heart_rate');
+        this.hrChar = await svc.getCharacteristic('heart_rate_measurement');
+        this.hrChar.addEventListener('characteristicvaluechanged', e => this._parseHR(e));
+        await this.hrChar.startNotifications();
+        document.getElementById('dotHr').classList.add('on');
+        document.getElementById('lblHr').textContent = 'HRM ✓';
+        document.getElementById('bleHr').classList.add('connected');
+        document.getElementById('bleHr').textContent = '❤️ HRM Conectado';
+    }
+
+    _parseHR(event) {
+        const v = event.target.value;
+        const flags = v.getUint8(0);
+        this.hr = (flags & 0x01) ? v.getUint16(1, true) : v.getUint8(1);
+    }
+
+    async connectCadence() {
+        if (!this.available) throw new Error('Web Bluetooth não disponível');
+        this.cadDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: ['cycling_speed_and_cadence'] }],
+            optionalServices: ['cycling_speed_and_cadence']
+        });
+        this.cadDevice.addEventListener('gattserverdisconnected', () => {
+            this.cadence = null;
+            document.getElementById('dotCad').classList.remove('on');
+            document.getElementById('lblCad').textContent = 'Cad';
+            document.getElementById('bleCad').classList.remove('connected');
+            document.getElementById('bleCad').textContent = '🔄 Conectar Cadência';
+        });
+        const server = await this.cadDevice.gatt.connect();
+        const svc = await server.getPrimaryService('cycling_speed_and_cadence');
+        this.cadChar = await svc.getCharacteristic('csc_measurement');
+        this.cadChar.addEventListener('characteristicvaluechanged', e => this._parseCad(e));
+        await this.cadChar.startNotifications();
+        document.getElementById('dotCad').classList.add('on');
+        document.getElementById('lblCad').textContent = 'Cad ✓';
+        document.getElementById('bleCad').classList.add('connected');
+        document.getElementById('bleCad').textContent = '🔄 Cadência Conectada';
+    }
+
+    _parseCad(event) {
+        const v = event.target.value;
+        const flags = v.getUint8(0);
+        let offset = 1;
+        if (flags & 0x01) offset += 6;
+        if (flags & 0x02) {
+            const crankRevs = v.getUint16(offset, true);
+            const crankTime = v.getUint16(offset + 2, true);
+            if (this._lastCrankRevs !== null) {
+                let dRevs = crankRevs - this._lastCrankRevs;
+                if (dRevs < 0) dRevs += 65536;
+                let dTime = crankTime - this._lastCrankTime;
+                if (dTime < 0) dTime += 65536;
+                if (dTime > 0 && dRevs > 0) {
+                    this.cadence = (dRevs / dTime) * 1024 * 60;
+                }
+            }
+            this._lastCrankRevs = crankRevs;
+            this._lastCrankTime = crankTime;
+        }
+    }
+
+    disconnect() {
+        if (this.hrDevice?.gatt?.connected) this.hrDevice.gatt.disconnect();
+        if (this.cadDevice?.gatt?.connected) this.cadDevice.gatt.disconnect();
+        this.hr = null; this.cadence = null;
+        this._lastCrankRevs = null; this._lastCrankTime = null;
+        document.getElementById('dotHr').classList.remove('on');
+        document.getElementById('dotCad').classList.remove('on');
+        document.getElementById('lblHr').textContent = 'HRM';
+        document.getElementById('lblCad').textContent = 'Cad';
+        document.getElementById('bleHr').classList.remove('connected');
+        document.getElementById('bleCad').classList.remove('connected');
+        document.getElementById('bleHr').textContent = '❤️ Conectar Cinta HR';
+        document.getElementById('bleCad').textContent = '🔄 Conectar Cadência';
+    }
+}
+
+/* ================================================================
+   CLASSES DE PROCESSAMENTO (mantidas sem alterações)
+   ================================================================ */
+class AngularAccCalc {
+    constructor() { this.reset(); }
+    compute(cad, t) {
+        if (cad == null || isNaN(cad) || cad < 5) { this.lastOmega = null; this.lastTime = null; this.alpha = 0; return 0; }
+        const omega = cad * 2 * Math.PI / 60;
+        if (this.lastOmega === null || this.lastTime === null) { this.lastOmega = omega; this.lastTime = t; this.alpha = 0; return 0; }
+        const dt = (t - this.lastTime) / 1000;
+        if (dt <= 0 || dt > 10) { this.lastOmega = omega; this.lastTime = t; this.alpha = 0; return 0; }
+        let alpha = (omega - this.lastOmega) / dt;
+        if (Math.abs(alpha) > 15) alpha = 0;
+        this.lastOmega = omega; this.lastTime = t; this.alpha = alpha;
+        return alpha;
+    }
+    reset() { this.lastOmega = null; this.lastTime = null; this.alpha = 0; }
+}
+
+class IndoorHybridModel {
+    constructor() { this.reset(); }
+    compute(hr, cad, alpha, t) {
+        const omega = cad != null ? cad * 2 * Math.PI / 60 : 0;
+        const isTransient = Math.abs(alpha) > C.alphaThreshold;
+        if (isTransient) { this.lastTransientTime = t; this.steadyStateStart = null; }
+        else if (cad != null && cad > 20) { if (this.steadyStateStart === null) this.steadyStateStart = t; }
+        else this.steadyStateStart = null;
+        const tSince = this.lastTransientTime ? (t - this.lastTransientTime) / 1000 : Infinity;
+        const steadyDur = this.steadyStateStart ? (t - this.steadyStateStart) / 1000 : 0;
+        const pInertia = C.flywheelInertia * alpha * omega;
+        const pCadence = C.kResist * cad * cad;
+        const pFC = this._pHR(hr);
+        let power, source, phase, pResist, pIner;
+        if (isTransient || tSince < C.transientDecaySec) {
+            phase = alpha > 0 ? 'acceleration' : 'deceleration';
+            source = alpha > 0 ? '🏃 Arrancada' : '⬇️ Desacelerando';
+            pResist = pCadence; pIner = pInertia; power = pResist + pIner;
+        } else if (steadyDur >= C.steadyStateSec && hr != null && pFC > 0) {
+            phase = 'steady'; source = '💓 Regime FC';
+            pResist = pFC; pIner = pInertia; power = pResist + pIner;
+        } else {
+            phase = 'hybrid'; source = '🔀 Transição';
+            const w = Math.min(1, steadyDur / C.steadyStateSec);
+            pResist = (hr != null && pFC > 0) ? (1 - w) * pCadence + w * pFC : pCadence;
+            pIner = pInertia; power = pResist + pIner;
+        }
+        return { power: Math.max(0, power), pResist, pInertia: pIner, source, phase, pFC, pCadence };
+    }
+    _pHR(hr) {
+        if (!hr || hr < C.hrRest) return 0;
+        const hrr = C.hrMax - C.hrRest; if (hrr <= 0) return 0;
+        const pct = Math.max(0, Math.min(1, (hr - C.hrRest) / hrr));
+        const vo2max = 15.3 * (C.hrMax / C.hrRest);
+        const vo2 = pct * vo2max;
+        if (vo2 <= 7) return 0;
+        return ((vo2 - 7) * C.mass / 1.8) / 6.12;
+    }
+    reset() { this.lastTransientTime = null; this.steadyStateStart = null; }
+}
+
+class PhysModel {
+    calc(mode, d) {
+        const { sp, gr, ac } = d;
+        const m = d.m || C.mass, cr = d.cr ?? C.crr, cd = d.cd ?? C.cda, ef = d.ef || C.effBike;
+        if (sp == null || isNaN(sp) || sp < 0) return { pg: 0, pr: 0, pa: 0, pc: 0, raw: 0, fin: 0, ok: false };
+        const pg = m * C.g * sp * gr;
+        let pr = 0, pa = 0, pc = 0;
+        if (mode === 'bike') { pr = m * C.g * cr * sp; pa = 0.5 * C.rho * cd * sp ** 3; pc = m * ac * sp; }
+        else if (mode === 'walk') { pr = m * C.g * cr * sp * 0.5; }
+        const raw = pg + pr + pa + pc;
+        return { pg, pr, pa, pc, raw, fin: raw / Math.max(0.01, Math.min(1, ef)), ok: true };
+    }
+}
+
+class AltFilter {
+    constructor(n = 7) { this.b = []; this.n = n; this.v = null; }
+    push(x) {
+        if (x == null || isNaN(x)) return;
+        this.b.push(x); if (this.b.length > this.n) this.b.shift();
+        const s = [...this.b].sort((a, b) => a - b); const m = s.length >> 1;
+        this.v = s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; return this.v;
+    }
+    reset() { this.b = []; this.v = null; }
+}
+
+class GradeCalc {
+    constructor(w = 30) { this.w = w; this.s = []; this.d = 0; }
+    add(alt, dd) {
+        this.d += dd; if (alt != null && !isNaN(alt)) this.s.push({ d: this.d, a: alt });
+        const c = this.d - this.w; while (this.s.length && this.s[0].d < c) this.s.shift();
+    }
+    calc() {
+        if (this.s.length < 2) return { g: 0, da: 0, dd: 0, cf: 0 };
+        const f = this.s[0], l = this.s[this.s.length - 1];
+        const dd = l.d - f.d, da = l.a - f.a;
+        if (dd < 5) return { g: 0, da: 0, dd: 0, cf: 0 };
+        const n = this.s.length; let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        for (const p of this.s) { const x = p.d - f.d; sx += x; sy += p.a; sxy += x * p.a; sxx += x * x; }
+        const dn = n * sxx - sx * sx; let sl = 0;
+        if (Math.abs(dn) > 1e-9) sl = (n * sxy - sx * sy) / dn;
+        return { g: sl, da, dd, cf: Math.min(1, dd / this.w) };
+    }
+    reset() { this.s = []; this.d = 0; }
+    setW(w) { this.w = w; }
+}
+
+class SpdCalc {
+    constructor() { this.fs = null; }
+    calc(s, dd, dt) {
+        let sp = null, src = 'none';
+        if (s.speed != null && !isNaN(s.speed) && s.speed >= 0) { sp = s.speed; src = 'gps'; }
+        else if (dd > 0 && dt > 0) { sp = dd / dt; src = 'hav'; }
+        if (sp != null && sp > C.maxSpd) { sp = null; src = 'rej'; }
+        if (sp != null) this.fs = this.fs === null ? sp : 0.7 * this.fs + 0.3 * sp;
+        return { sp, fs: this.fs, src };
+    }
+    reset() { this.fs = null; }
+}
+
+class AccCalc {
+    constructor() { this.ls = null; this.lt = null; }
+    calc(sp, t) {
+        if (sp == null || this.ls == null || this.lt == null) { this.ls = sp; this.lt = t; return 0; }
+        const dt = (t - this.lt) / 1000;
+        if (dt <= 0) return 0;
+        let a = (sp - this.ls) / dt;
+        if (Math.abs(a) > C.maxAcc) a = 0;
+        this.ls = sp; this.lt = t; return a;
+    }
+    reset() { this.ls = null; this.lt = null; }
+}
+
+class PwrFilt {
+    constructor(tc = 3) { this.tc = tc; this.v = null; this.lt = null; }
+    calc(x, t) {
+        if (x == null || isNaN(x)) return this.v;
+        if (this.v === null) { this.v = x; this.lt = t; return x; }
+        const dt = (t - this.lt) / 1000;
+        if (dt <= 0) return this.v;
+        const a = 1 - Math.exp(-dt / this.tc);
+        this.v += a * (x - this.v); this.lt = t; return this.v;
+    }
+    setTC(tc) { this.tc = Math.max(0.5, Math.min(15, tc)); }
+    reset() { this.v = null; this.lt = null; }
+}
+
+class HRFilter {
+    constructor(tc = 5) { this.tc = tc; this.v = null; this.lt = null; }
+    calc(x, t) {
+        if (x == null) return this.v;
+        if (this.v === null) { this.v = x; this.lt = t; return x; }
+        const dt = (t - this.lt) / 1000;
+        if (dt <= 0) return this.v;
+        const a = 1 - Math.exp(-dt / this.tc);
+            this.v += a * (x - this.v); this.lt = t; return this.v;
+    }
+    reset() { this.v = null; this.lt = null; }
+}
+
+class CadFilter {
+    constructor(tc = 2) { this.tc = tc; this.v = null; this.lt = null; }
+    calc(x, t) {
+        if (x == null) return this.v;
+        if (this.v === null) { this.v = x; this.lt = t; return x; }
+        const dt = (t - this.lt) / 1000;
+        if (dt <= 0) return this.v;
+        const a = 1 - Math.exp(-dt / this.tc);
+        this.v += a * (x - this.v); this.lt = t; return this.v;
+    }
+    reset() { this.v = null; this.lt = null; }
+}
+
+class TorqueEstimator {
+    compute(p, cad) {
+        if (!cad || cad < 10 || !p || p <= 0) return null;
+        return p / (cad * 2 * Math.PI / 60);
+    }
+}
+
+class FTPEstimator {
+    constructor() { this.reset(); }
+    static getZones(ftp) {
+        if (!ftp || ftp <= 0) return null;
+        return [
+            { name: 'Z1', min: 0, max: 0.55 },
+            { name: 'Z2', min: 0.56, max: 0.75 },
+            { name: 'Z3', min: 0.76, max: 0.90 },
+            { name: 'Z4', min: 0.91, max: 1.05 },
+            { name: 'Z5', min: 1.06, max: 1.20 },
+            { name: 'Z6', min: 1.21, max: 1.50 },
+            { name: 'Z7', min: 1.51, max: Infinity }
+        ];
+    }
+    static getZone(power, ftp) {
+        if (!ftp || ftp <= 0 || power == null) return null;
+        const pct = power / ftp;
+        const zones = this.getZones(ftp);
+        for (let i = 0; i < zones.length; i++) {
+            if (pct >= zones[i].min && pct <= zones[i].max) return i;
+        }
+        return 6;
+    }
+    update(sample) {
+        if (!sample || sample.power == null || isNaN(sample.power)) return;
+        this.powerHistory.push(sample);
+        const now = sample.timestamp;
+        if (this.currentFtp && this.lastUpdateTime) {
+            const dt = (now - this.lastUpdateTime) / 1000;
+            if (dt > 0 && dt < 10) {
+                const diff = sample.power - this.currentFtp;
+                if (diff > 0) this.wPrimeRemaining -= diff * dt;
+                else {
+                    const tau = 540;
+                    this.wPrimeRemaining += -diff * (1 - Math.exp(-dt / tau)) * dt;
+                }
+                this.wPrimeRemaining = Math.max(0, Math.min(C.wPrime, this.wPrimeRemaining));
+            }
+        }
+        this.lastUpdateTime = now;
+        if (this.currentFtp) {
+            const zone = FTPEstimator.getZone(sample.power, this.currentFtp);
+            if (zone != null) {
+                if (this._lastZoneTime == null) this._lastZoneTime = now;
+                const dt = (now - this._lastZoneTime) / 1000;
+                if (dt > 0 && dt < 10) this.zoneTime[zone] += dt;
+                this._lastZoneTime = now;
+            }
+        }
+        this._updateEstimates(now);
+    }
+    _updateEstimates(timestamp) {
+        const cutoff = timestamp - 7200000;
+        while (this.powerHistory.length > 0 && this.powerHistory[0].timestamp < cutoff) this.powerHistory.shift();
+        this._updatePDCurve(timestamp);
+        if (C.ftpKnown > 0) this.currentFtp = C.ftpKnown;
+        else {
+            const avg20 = this._bestAverage(1200);
+            if (avg20 > 0) this.currentFtp = avg20 * 0.95;
+            else {
+                const avg5 = this._bestAverage(300);
+                if (avg5 > 0) this.currentFtp = avg5 * 0.87;
+            }
+        }
+    }
+    _updatePDCurve(timestamp) {
+        const tests = [['5s',5],['1m',60],['5m',300],['20m',1200]];
+        for (const [k,d] of tests) {
+            const avg = this._bestAverage(d);
+            if (avg > 0) this.pdCurve[k] = avg;
+        }
+    }
+    _bestAverage(durationSec) {
+        if (this.powerHistory.length < 2) return 0;
+        const durationMs = durationSec * 1000;
+        const endTs = this.powerHistory[this.powerHistory.length - 1].timestamp;
+        const startTs = endTs - durationMs;
+        const window = this.powerHistory.filter(s => s.timestamp >= startTs);
+        if (window.length < 2) return 0;
+        let totalEnergy = 0, totalTime = 0;
+        for (let i = 1; i < window.length; i++) {
+            const dt = (window[i].timestamp - window[i - 1].timestamp) / 1000;
+            if (dt > 0 && dt < 30) {
+                const avgPower = (window[i].power + window[i - 1].power) / 2;
+                totalEnergy += avgPower * dt;
+                totalTime += dt;
+            }
+        }
+        return totalTime > 0 ? totalEnergy / totalTime : 0;
+    }
+    getIF(np) { return this.currentFtp && np ? np / this.currentFtp : null; }
+    getNormalizedPower() {
+        if (this.powerHistory.length < 10) return null;
+        let sum4 = 0;
+        for (const s of this.powerHistory) sum4 += Math.pow(s.power, 4);
+        return Math.pow(sum4 / this.powerHistory.length, 0.25);
+    }
+    getTSS(durationSec) {
+        if (!this.currentFtp) return null;
+        const np = this.getNormalizedPower();
+        if (!np) return null;
+        return (np * np * durationSec) / (this.currentFtp * this.currentFtp * 3600) * 100;
+    }
+    getTRIMP(durationSec) {
+        if (this.powerHistory.length < 2) return 0;
+        const hrr = C.hrMax - C.hrRest;
+        if (hrr <= 0) return 0;
+        let trimp = 0;
+        for (let i = 1; i < this.powerHistory.length; i++) {
+            const dt = (this.powerHistory[i].timestamp - this.powerHistory[i - 1].timestamp) / 60000;
+            if (dt <= 0 || dt > 1) continue;
+            const hr = this.powerHistory[i].hr;
+            let pctHRR;
+            if (hr != null && hr > C.hrRest) pctHRR = (hr - C.hrRest) / hrr;
+            else pctHRR = this.currentFtp ? this.powerHistory[i].power / this.currentFtp : 0;
+            pctHRR = Math.max(0, Math.min(1, pctHRR));
+            const y = 1.67 * Math.exp(0.173 * pctHRR * 100 - 9.65) / 100;
+            trimp += dt * pctHRR * 100 * Math.max(0, y);
+        }
+        return trimp;
+    }
+    getEnergyKJ() {
+        if (this.powerHistory.length < 2) return 0;
+        let total = 0;
+        for (let i = 1; i < this.powerHistory.length; i++) {
+            const dt = (this.powerHistory[i].timestamp - this.powerHistory[i - 1].timestamp) / 1000;
+            if (dt > 0 && dt < 30) total += (this.powerHistory[i].power + this.powerHistory[i - 1].power) / 2 * dt;
+        }
+        return total / 1000;
+    }
+    reset() {
+        this.powerHistory = []; this.zoneTime = [0,0,0,0,0,0,0];
+        this.currentFtp = null; this.pdCurve = {'5s':0,'1m':0,'5m':0,'20m':0};
+        this.wPrimeRemaining = C.wPrime; this.lastUpdateTime = null; this._lastZoneTime = null;
+    }
+}
+
+class Session {
+    constructor() { this.reset(); }
+    reset() { this.t0 = null; this.tp = null; this.tpT = 0; this.run = false; this.pause = false; this.dist = 0; this.samples = []; }
+    start() { this.t0 = Date.now(); this.run = true; this.pause = false; }
+    pause_() { if (this.run && !this.pause) { this.tp = Date.now(); this.pause = true; } }
+    resume() { if (this.pause) { this.tpT += Date.now() - this.tp; this.tp = null; this.pause = false; } }
+    stop() { this.run = false; this.pause = false; }
+    elapsed() { if (!this.t0) return 0; return ((this.pause ? this.tp : Date.now()) - this.t0 - this.tpT) / 1000; }
+    addDist(d) { if (d > 0 && d < 100) this.dist += d; }
+    addS(s) { this.samples.push(s); }
+}
+
+class Chart {
+    constructor(id) {
+        this.cv = document.getElementById(id); this.cx = this.cv.getContext('2d');
+        this.d = { power: [], hr: [], speed: [], cadence: [], alpha: [], altitude: [], grade: [] };
+        this.cur = 'power'; this.mx = 200;
+        this._rsz(); window.addEventListener('resize', () => this._rsz());
+    }
+    _rsz() {
+        const r = this.cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+        this.cv.width = r.width * d; this.cv.height = r.height * d;
+        this.cx.scale(d, d); this.w = r.width; this.h = r.height; this.draw();
+    }
+    add(k, v) { if (!this.d[k]) return; this.d[k].push(v); if (this.d[k].length > this.mx) this.d[k].shift(); }
+    set(k) { this.cur = k; this.draw(); }
+    clear() { for (const k in this.d) this.d[k] = []; this.draw(); }
+    draw() {
+        const x = this.cx, w = this.w, h = this.h, d = this.d[this.cur] || [];
+        x.clearRect(0, 0, w, h); x.fillStyle = '#0a0e1a'; x.fillRect(0, 0, w, h);
+        const vals = d.filter(v => v != null && !isNaN(v));
+        if (vals.length < 2) { x.fillStyle = '#64748b'; x.font = '13px sans-serif'; x.textAlign = 'center'; x.fillText('Aguardando dados...', w / 2, h / 2); return; }
+        let minV = Math.min(...vals), maxV = Math.max(...vals);
+        if (minV === maxV) { minV -= 1; maxV += 1; }
+        const rng = maxV - minV, pd = rng * 0.1; minV -= pd; maxV += pd;
+        const ml = 45, mr = 10, mt = 10, mb = 20, pw = w - ml - mr, ph = h - mt - mb;
+        x.strokeStyle = '#1a2332'; x.lineWidth = 1; x.beginPath();
+        for (let i = 0; i <= 4; i++) { const y = mt + ph * i / 4; x.moveTo(ml, y); x.lineTo(w - mr, y); }
+        x.stroke();
+        x.fillStyle = '#64748b'; x.font = '9px sans-serif'; x.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) { const y = mt + ph * i / 4; x.fillText((maxV - (rng + 2 * pd) * i / 4).toFixed(1), ml - 4, y + 3); }
+        const cols = { power: '#fbbf24', hr: '#ef4444', speed: '#00d9ff', cadence: '#f59e0b', alpha: '#f472b6', altitude: '#10b981', grade: '#8b5cf6' };
+        const c = cols[this.cur] || '#00d9ff';
+        x.strokeStyle = c; x.lineWidth = 2; x.beginPath();
+        let started = false;
+        for (let i = 0; i < d.length; i++) {
+            const v = d[i]; if (v == null || isNaN(v)) continue;
+            const px = ml + i / (d.length - 1) * pw, py = mt + ph - ((v - minV) / (maxV - minV)) * ph;
+            if (!started) { x.moveTo(px, py); started = true; } else x.lineTo(px, py);
+        }
+        x.stroke();
+        if (started) { x.lineTo(ml + pw, mt + ph); x.lineTo(ml, mt + ph); x.closePath(); x.fillStyle = c + '20'; x.fill(); }
+        const titles = { power: 'Potência (W)', hr: 'FC (bpm)', speed: 'Vel (km/h)', cadence: 'Cad (rpm)', alpha: 'α (rad/s²)', altitude: 'Alt (m)', grade: 'Incl (%)' };
+        x.fillStyle = '#94a3b8'; x.font = '10px sans-serif'; x.textAlign = 'left';
+        x.fillText(titles[this.cur], ml + 4, mt + 11);
+    }
+}
+
+class Sim {
+    constructor() { this.on = false; this.sc = 0; this.t0 = 0; this.lt = 0; this.dist = 0; this.alt = 100; }
+    start(s) { this.on = true; this.sc = s; this.t0 = Date.now(); this.lt = Date.now(); this.dist = 0; this.alt = 100; }
+    stop() { this.on = false; }
+    next() {
+        if (!this.on) return null;
+        const now = Date.now(), dt = (now - this.lt) / 1000; this.lt = now;
+        const el = (now - this.t0) / 1000;
+        let sp = 0, da = 0, ac = 0, hr = 120, cad = 0;
+        switch (this.sc) {
+            case 1: sp = 5 / 3.6; hr = 110; break;
+            case 2: sp = 5 / 3.6; da = sp * dt * 0.05; hr = 140; cad = 70; break;
+            case 3: sp = 4 / 3.6; da = sp * dt * 0.10; hr = 160; cad = 65; break;
+            case 4: { const t = Math.min(el, 20); sp = (10 + 20 * t / 20) / 3.6; ac = (20 / 3.6) / 20; hr = 120 + el * 2; cad = 80 + el; break; }
+            case 5: sp = 8 / 3.6; da = -sp * dt * 0.05; hr = 100; cad = 85; break;
+            case 6: { sp = 0; if (el < 4) { cad = 90 * (el / 4); hr = 80 + el * 5; } else if (el < 34) { cad = 90; hr = 100 + (el - 4) * 1.5; } else { cad = 0; hr = 140 - (el - 34) * 2; } break; }
+            case 7: { sp = 0; const cycle = el % 30; if (cycle < 5) { cad = 100 * (cycle / 5); hr = 90 + cycle * 3; } else if (cycle < 25) { cad = 100; hr = 105 + (cycle - 5) * 2; } else { cad = 100 * (1 - (cycle - 25) / 5); hr = 145 - (cycle - 25) * 5; } break; }
+            case 8: sp = 0; cad = 90; hr = 80 + Math.min(60, el * 1.2); break;
+            case 9: { sp = 0; const phase = Math.min(el, 1200); if (phase < 300) { cad = 70; hr = 90 + phase * 0.1; } else if (phase < 600) { cad = 85; hr = 130 + (phase - 300) * 0.05; } else if (phase < 900) { cad = 95; hr = 150 + (phase - 600) * 0.05; } else { cad = 100; hr = 165 + (phase - 900) * 0.03; } break; }
+        }
+        this.alt += da; this.dist += sp * dt;
+        const n = () => (Math.random() - 0.5) * 0.3;
+        return {
+            timestamp: now, latitude: -23.55 + (this.dist / 111000), longitude: -46.63,
+            altitude: this.alt + n(), accuracy: 3 + Math.random() * 2,
+            speed: sp + n() * 0.1, heading: 0, _sim: true,
+            _hr: Math.round(Math.max(50, hr)), _cad: Math.max(0, Math.round(cad))
+        };
+    }
+}
+
+/* ================================================================
+   APP PRINCIPAL
+   ================================================================ */
+class App {
+    constructor() {
+        this.ble = new BLEManager();
+        this.ftms = new FTMSBroadcaster();
+        this.angAcc = new AngularAccCalc();
+        this.hybrid = new IndoorHybridModel();
+        this.phys = new PhysModel();
+        this.altF = new AltFilter(); this.grdC = new GradeCalc();
+        this.spdC = new SpdCalc(); this.accC = new AccCalc();
+        this.pFilt = new PwrFilt(); this.hrFilt = new HRFilter(5);
+        this.cadFilt = new CadFilter(2);
+        this.trqEst = new TorqueEstimator();
+        this.ftpEst = new FTPEstimator();
+        this.sess = new Session();
+        this.chart = new Chart('chart');
+        this.sim = new Sim();
+
+        this.mode = 'walk'; this.last = null;
+        this.watchId = null; this.simIv = null; this.gpsOk = false;
+
+        this._initWelcome();
+    }
+
+    _initWelcome() {
+        const st = document.getElementById('pstat');
+        document.getElementById('btnEnter').onclick = async () => {
+            const b = document.getElementById('btnEnter');
+            b.disabled = true; b.textContent = '⏳ Solicitando...';
+            st.className = 'pstat vis pd';
+            st.textContent = 'Seu celular vai pedir permissão de localização...';
+            if (!window.isSecureContext && location.hostname !== 'localhost') {
+                st.className = 'pstat vis er';
+                st.innerHTML = '⚠️ Contexto não seguro. Use HTTPS ou localhost.';
+                b.disabled = false; b.textContent = '📍 Permitir GPS e entrar';
+                return;
+            }
+            if (!('geolocation' in navigator)) {
+                st.className = 'pstat vis er'; st.textContent = 'Geolocation não suportada.';
+                b.disabled = false; b.textContent = '📍 Permitir GPS e entrar';
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                p => {
+                    this.gpsOk = true;
+                    st.className = 'pstat vis ok';
+                    st.innerHTML = `✅ GPS autorizado! Precisão: ±${p.coords.accuracy.toFixed(1)}m.`;
+                    setTimeout(() => this._enter(true), 800);
+                },
+                e => {
+                    let m = 'Erro GPS.';
+                    if (e.code === 1) m = 'Permissão negada.';
+                    else if (e.code === 2) m = 'GPS indisponível.';
+                    else m = 'Timeout.';
+                    st.className = 'pstat vis er'; st.textContent = m;
+                    b.disabled = false; b.textContent = '📍 Tentar novamente';
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        };
+        document.getElementById('btnSimEnter').onclick = () => this._enter(false);
+    }
+
+    _enter(gps) {
+        document.getElementById('welcome').classList.add('hidden');
+        document.getElementById('app').classList.add('vis');
+        if (gps) {
+            document.getElementById('dotGps').classList.add('on');
+            document.getElementById('lblGps').textContent = 'GPS ✓';
+        }
+        this._bind();
+        this._uiTick();
+        this._updateFTMSStatus();
+    }
+
+    _bind() {
+        document.querySelectorAll('.mbtn').forEach(b => b.onclick = () => {
+            document.querySelectorAll('.mbtn').forEach(x => x.classList.remove('act'));
+            b.classList.add('act'); this.mode = b.dataset.mode;
+        });
+
+        document.getElementById('bStart').onclick = () => this._start();
+        document.getElementById('bPause').onclick = () => this._pause();
+        document.getElementById('bStop').onclick = () => this._stop();
+        document.getElementById('bReset').onclick = () => this._reset();
+        document.getElementById('bExp').onclick = () => this._export();
+        document.getElementById('bSim').onclick = () => document.getElementById('simPanel').classList.toggle('vis');
+        document.getElementById('bDbg').onclick = () => document.getElementById('dbgPanel').classList.toggle('vis');
+        document.getElementById('bFtms').onclick = () => this._toggleFTMS();
+
+        document.getElementById('bleHr').onclick = async () => {
+            try { await this.ble.connectHR(); document.getElementById('bleDisc').disabled = false; }
+            catch (e) { alert('Erro HR: ' + e.message); }
+        };
+        document.getElementById('bleCad').onclick = async () => {
+            try { await this.ble.connectCadence(); document.getElementById('bleDisc').disabled = false; }
+            catch (e) { alert('Erro Cad: ' + e.message); }
+        };
+        document.getElementById('bleDisc').onclick = () => { this.ble.disconnect(); document.getElementById('bleDisc').disabled = true; };
+
+        document.querySelectorAll('.sbtn').forEach(b => b.onclick = () => {
+            document.querySelectorAll('.sbtn').forEach(x => x.classList.remove('act'));
+            b.classList.add('act');
+            const sc = +b.dataset.s;
+            if (sc >= 6 && sc <= 9) {
+                document.querySelectorAll('.mbtn').forEach(x => x.classList.remove('act'));
+                document.querySelector('[data-mode="indoor"]').classList.add('act');
+                this.mode = 'indoor';
+            }
+            this.sim.start(sc); this._reset(); this._startSim(); this._start();
+        });
+
+        document.querySelectorAll('.ctab').forEach(t => t.onclick = () => {
+            document.querySelectorAll('.ctab').forEach(x => x.classList.remove('act'));
+            t.classList.add('act'); this.chart.set(t.dataset.c);
+        });
+
+        const pi = (id, k) => document.getElementById(id).addEventListener('change', e => { C[k] = parseFloat(e.target.value) || C[k]; });
+        pi('pMass', 'mass'); pi('pAge', 'age');
+        pi('pHrRest', 'hrRest'); pi('pHrMax', 'hrMax');
+        pi('pEffHum', 'effHuman'); pi('pEffBike', 'effBike');
+        pi('pCrr', 'crr'); pi('pCda', 'cda');
+        pi('pInertia', 'flywheelInertia'); pi('pKresist', 'kResist');
+        pi('pAlphaThr', 'alphaThreshold'); pi('pFtpKnown', 'ftpKnown');
+        pi('pWprime', 'wPrime');
+
+        document.getElementById('pFilt').addEventListener('change', e => { C.filtSec = parseFloat(e.target.value) || 3; this.pFilt.setTC(C.filtSec); });
+        document.getElementById('pGWin').addEventListener('change', e => { C.gradeWin = parseFloat(e.target.value) || 30; this.grdC.setW(C.gradeWin); });
+    }
+
+    _start() {
+        if (this.sess.run && !this.sess.pause) return;
+        if (!this.sess.run) this.sess.start(); else this.sess.resume();
+        if (this.gpsOk && !this.sim.on) {
+            this.watchId = navigator.geolocation.watchPosition(
+                p => this._gps(this._norm(p)),
+                e => console.warn('GPS err:', e.message),
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+            );
+            document.getElementById('dotGps').classList.add('on');
+        }
+        document.getElementById('bStart').disabled = true;
+        document.getElementById('bPause').disabled = false;
+        document.getElementById('bStop').disabled = false;
+    }
+
+    _norm(p) {
+        const c = p.coords;
+        return { timestamp: p.timestamp || Date.now(), latitude: c.latitude, longitude: c.longitude, altitude: c.altitude, accuracy: c.accuracy, speed: c.speed, heading: c.heading };
+    }
+
+    _pause() {
+        if (!this.sess.run || this.session.paused) return;
+        this.session.pause();
+        if (this.watchId) { navigator.geolocation.clearWatch(this.watchId); this.watchId = null; }
+        document.getElementById('bStart').disabled = false;
+        document.getElementById('bPause').disabled = true;
+    }
+
+    _stop() {
+        this.sess.stop();
+        if (this.watchId) { navigator.geolocation.clearWatch(this.watchId); this.watchId = null; }
+        if (this.simIv) { clearInterval(this.simIv); this.simIv = null; }
+        this.sim.stop();
+        document.getElementById('bStart').disabled = false;
+        document.getElementById('bPause').disabled = true;
+        document.getElementById('bStop').disabled = true;
+        this._finalStats();
+    }
+
+    _reset() {
+        this.sess.reset(); this.ftpEst.reset();
+        this.altF.reset(); this.grdC.reset(); this.spdC.reset(); this.accC.reset();
+        this.pFilt.reset(); this.hrFilt.reset(); this.cadFilt.reset();
+        this.angAcc.reset(); this.hybrid.reset();
+        this.chart.clear(); this.last = null;
+        document.getElementById('logBody').innerHTML = '';
+        document.getElementById('finalStats').style.display = 'none';
+    }
+
+    _export() {
+        if (!this.sess.samples.length) { alert('Sem amostras.'); return; }
+        const h = ['ts','lat','lon','alt','acc','spd_ms','spd_kmh','dist_m','grade_pct','accel',
+                   'hr_bpm','cad_rpm','alpha_rad_s2','torque_nm',
+                   'p_grav','p_roll','p_aero','p_accel_lin','p_inertia','p_resist','p_raw','p_filt',
+                   'ftp_estimated','power_pct_ftp','coggan_zone','power_source','power_phase','mode'];
+        const rows = [h.join(',')];
+        for (const s of this.sess.samples) {
+            rows.push([
+                s.ts, s.lat, s.lon, s.alt ?? '', s.acc ?? '',
+                s.spd_ms ?? '', s.spd_kmh ?? '', s.dist.toFixed(2),
+                s.grd ?? '', s.accel ?? '',
+                s.hr ?? '', s.cad ?? '', s.alpha != null ? s.alpha.toFixed(3) : '',
+                s.trq != null ? s.trq.toFixed(2) : '',
+                s.pg.toFixed(1), s.pr.toFixed(1), s.pa.toFixed(1), s.pc.toFixed(1),
+                s.pInertia != null ? s.pInertia.toFixed(1) : '0',
+                s.pResist != null ? s.pResist.toFixed(1) : '0',
+                s.raw.toFixed(1), s.filt.toFixed(1),
+                s.ftp ?? '', s.pctFtp != null ? s.pctFtp.toFixed(1) : '',
+                s.zone ?? '', s.source || '', s.phase || '', s.mode
+            ].join(','));
+        }
+        const b = new Blob([rows.join('\n')], { type: 'text/csv' });
+        const u = URL.createObjectURL(b);
+        const a = document.createElement('a');
+        a.href = u;
+        a.download = `pwr_${this.mode}_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.csv`;
+        a.click();
+        URL.revokeObjectURL(u);
+    }
+
+    _startSim() {
+        if (this.simIv) clearInterval(this.simIv);
+        this.simIv = setInterval(() => {
+            if (!this.sim.on || this.sess.pause) return;
+            const s = this.sim.next();
+            if (s) this._gps(s);
+        }, 1000);
+    }
+
+    async _toggleFTMS() {
+        const btn = document.getElementById('bFtms');
+        const dot = document.getElementById('dotFtms');
+        const lbl = document.getElementById('lblFtms');
+        const notice = document.getElementById('ftmsNotice');
+        const status = document.getElementById('ftmsStatus');
+
+        if (this.ftms.active) {
+            this.ftms.stop();
+            btn.classList.remove('active');
+            dot.classList.remove('broadcast');
+            lbl.textContent = 'FTMS';
+            notice.style.display = 'none';
+            status.classList.remove('active');
+            this._updateFTMSStatus();
+        } else {
+            btn.disabled = true;
+            btn.textContent = '⏳ Ativando...';
+            
+            const success = await this.ftms.start();
+            
+            btn.disabled = false;
+            
+            if (success) {
+                btn.classList.add('active');
+                dot.classList.add('broadcast');
+                lbl.textContent = 'FTMS ✓';
+                notice.style.display = 'block';
+                status.classList.add('active');
+                this._updateFTMSStatus();
+            } else {
+                btn.textContent = '📡 FTMS';
+                const warn = document.getElementById('ftmsWarn');
+                warn.innerHTML = `⚠️ ${this.ftms.lastError || 'Não foi possível ativar o broadcast'}`;
+            }
+        }
+    }
+
+    _updateFTMSStatus() {
+        const status = document.getElementById('ftmsStatus');
+        const warn = document.getElementById('ftmsWarn');
+        
+        if (this.ftms.active) {
+            status.innerHTML = `
+                <div class="fs-title">📡 FTMS Broadcast ATIVO</div>
+                <div class="fs-info">
+                    Transmitindo Cycling Power Service (0x1818)<br>
+                    Pacotes enviados: <span class="fs-counter">${this.ftms.packetsSent}</span><br>
+                    Potência atual: <span class="fs-counter">${this.ftms.currentPower} W</span><br>
+                    Cadência atual: <span class="fs-counter">${this.ftms.currentCadence} rpm</span>
+                </div>
+            `;
+        } else {
+            status.innerHTML = `
+                <div class="fs-title">📡 FTMS Broadcast</div>
+                <div class="fs-info">
+                    Clique em <strong>"📡 FTMS"</strong> acima para transmitir potência via Bluetooth.<br>
+                    Apps como <strong>Zwift, Rouvy, MyWhoosh e SmartSpin2K</strong> poderão se conectar.
+                </div>
+                <div class="fs-warn" id="ftmsWarn">
+                    ⚠️ Requer Chrome com Web Bluetooth habilitado.<br>
+                    📱 Funciona melhor em Android Chrome.<br>
+                    🍎 iOS não suporta Web Bluetooth.
+                </div>
+            `;
+        }
+    }
+
+    _gps(s) {
+        if (this.sess.pause || !s || s.latitude == null || isNaN(s.latitude)) return;
+        const now = s.timestamp;
+        let dd = 0, dt = 0;
+        if (this.last) {
+            dt = (now - this.last.timestamp) / 1000;
+            if (dt <= 0 || dt > 30) { this.last = s; return; }
+            dd = this._haversine(this.last.latitude, this.last.longitude, s.latitude, s.longitude);
+            if (dd > 500) dd = 0;
+        }
+        this.sess.addDist(dd);
+
+        let fa = null;
+        if (s.altitude != null && !isNaN(s.altitude)) {
+            if (this.altF.v != null && Math.abs(s.altitude - this.altF.v) > C.maxAltJump) fa = this.altF.v;
+            else fa = this.altF.push(s.altitude);
+        }
+
+        this.grdC.add(fa, dd); const gi = this.grdC.calc();
+        const si = this.spdC.calc(s, dd, dt); const sp = si.fs;
+        const ac = this.mode === 'bike' ? this.accC.calc(sp, now) : 0;
+
+        const hrRaw = s._hr != null ? s._hr : this.ble.hr;
+        const hrFilt = this.hrFilt.calc(hrRaw, now);
+        const cadRaw = s._cad != null ? s._cad : this.ble.cadence;
+        const cadFilt = this.cadFilt.calc(cadRaw, now);
+        const alpha = this.angAcc.compute(cadFilt, now);
+
+        let pwr, src = '—', phase = '—';
+        let pInertia = 0, pResist = 0;
+
+        if (this.mode === 'indoor') {
+            const hyb = this.hybrid.compute(hrFilt, cadFilt, alpha, now);
+            pwr = { pg: 0, pr: 0, pa: 0, pc: 0, raw: hyb.power, fin: hyb.power, ok: hyb.power > 0 };
+            pInertia = hyb.pInertia; pResist = hyb.pResist;
+            src = hyb.source; phase = hyb.phase;
+        } else {
+            pwr = this.phys.calc(this.mode, { sp, gr: gi.g, ac, m: C.mass, cr: C.crr, cd: C.cda, ef: C.effBike });
+            src = '🌍 GPS físico'; phase = 'outdoor';
+        }
+
+        const pf = this.pFilt.calc(pwr.fin, now);
+        const trq = this.trqEst.compute(pf, cadFilt);
+
+        this.ftpEst.update({ power: Math.max(0, pf), hr: hrFilt, timestamp: now });
+        const ftp = this.ftpEst.currentFtp;
+        const pctFtp = ftp && ftp > 0 && pf != null ? (pf / ftp) * 100 : null;
+        const zone = FTPEstimator.getZone(pf, ftp);
+
+        this.sess.addS({
+            ts: now, lat: s.latitude, lon: s.longitude,
+            alt: fa, acc: s.accuracy,
+            spd_ms: sp, spd_kmh: sp ? sp * 3.6 : null,
+            dist: this.sess.dist, grd: gi.g * 100, accel: ac,
+            hr: hrFilt, cad: cadFilt, alpha, trq,
+            pg: pwr.pg, pr: pwr.pr, pa: pwr.pa, pc: pwr.pc,
+            pInertia, pResist, raw: pwr.raw, filt: pf,
+            ftp, pctFtp, zone, phase, mode: this.mode, source: src
+        });
+
+        // Atualiza FTMS broadcaster
+        if (this.ftms.active) {
+            this.ftms.updatePower(pf, cadFilt);
+        }
+
+        this._ui({ s, fa, sp, si, gi, ac, pwr, pf, hr: hrFilt, cad: cadFilt, alpha, trq, dd, dt, src, phase, pInertia, pResist, ftp, pctFtp, zone });
+
+        this.chart.add('power', pf);
+        this.chart.add('hr', hrFilt);
+        this.chart.add('speed', sp ? sp * 3.6 : null);
+        this.chart.add('cadence', cadFilt);
+        this.chart.add('alpha', alpha);
+        this.chart.add('altitude', fa);
+        this.chart.add('grade', gi.g * 100);
+
+        this.last = s;
+    }
+
+    _haversine(lat1, lon1, lat2, lon2) {
+        const R = C.R;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    _ui(ui) {
+        const { s, fa, sp, si, gi, ac, pwr, pf, hr, cad, alpha, trq, src, phase, pInertia, pResist, ftp, pctFtp, zone } = ui;
+
+        if (s) {
+            const a = s.accuracy;
+            let q = 'Ruim';
+            const dot = document.getElementById('dotGps');
+            if (a <= 5) { dot.className = 'bdot on'; q = 'Excelente'; }
+            else if (a <= 10) { dot.className = 'bdot on'; q = 'Boa'; }
+            else if (a <= 20) { dot.className = 'bdot on'; q = 'Moderada'; }
+            else { dot.className = 'bdot on'; q = 'Ruim'; }
+            document.getElementById('vQgps').textContent = q;
+            document.getElementById('vQacc').textContent = `±${a.toFixed(1)}m`;
+        }
+
+        const pv = pf != null && !isNaN(pf) ? pf : 0;
+        document.getElementById('vPwr').textContent = Math.round(Math.max(0, pv)).toString().padStart(3, '0');
+        document.getElementById('pwrSrc').textContent = `Fonte: ${src}`;
+
+        const samples = this.sess.samples;
+        let pSum = 0, pMax = 0, pCnt = 0;
+        for (const s of samples) { if (s.filt != null) { pSum += s.filt; pCnt++; if (s.filt > pMax) pMax = s.filt; } }
+        const pAvg = pCnt > 0 ? pSum / pCnt : 0;
+        document.getElementById('vPavg').textContent = Math.round(pAvg) + 'W';
+        document.getElementById('vPmax').textContent = Math.round(pMax) + 'W';
+
+        const np = this.ftpEst.getNormalizedPower();
+        document.getElementById('vPftp').textContent = pctFtp != null ? pctFtp.toFixed(0) + '%' : '—';
+        document.getElementById('vNP').textContent = np != null ? Math.round(np) + 'W' : '—';
+
+        if (ftp && ftp > 0) {
+            document.getElementById('vFTP').textContent = Math.round(ftp);
+            const method = C.ftpKnown > 0 ? 'manual' : (this.ftpEst.powerHistory.length > 1200 ? '20min×0.95' : '5min×0.87');
+            document.getElementById('ftpSub').textContent = method;
+            document.getElementById('ftpBadge').textContent = '✓ ativo';
+            const ifVal = this.ftpEst.getIF(np);
+            document.getElementById('vIF').textContent = ifVal != null ? ifVal.toFixed(2) : '—';
+            document.getElementById('ifSub').textContent = ifVal != null ? (ifVal < 0.75 ? 'leve' : ifVal < 0.9 ? 'moderado' : ifVal < 1.05 ? 'limiar' : 'intenso') : '';
+            const zones = FTPEstimator.getZones(ftp);
+            const zoneDivs = document.querySelectorAll('.zone');
+            zoneDivs.forEach((div, i) => {
+                div.classList.remove('active');
+                const z = zones[i];
+                const minW = Math.round(z.min * ftp);
+                const maxW = z.max === Infinity ? '∞' : Math.round(z.max * ftp);
+                div.querySelector('.zrange').textContent = `${minW}-${maxW}W`;
+                const t = this.ftpEst.zoneTime[i];
+                const min = Math.floor(t / 60);
+                const sec = Math.floor(t % 60);
+                div.querySelector('.ztime').textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+                if (zone === i) div.classList.add('active');
+            });
+        } else {
+            document.getElementById('vFTP').textContent = '—';
+            document.getElementById('ftpSub').textContent = 'aguardando';
+            document.getElementById('ftpBadge').textContent = 'calculando...';
+            document.getElementById('vIF').textContent = '—';
+        }
+
+        const pd = this.ftpEst.pdCurve;
+        for (const k of ['5s', '1m', '5m', '20m']) {
+            const el = document.getElementById('p' + k);
+            const pctEl = document.getElementById('p' + k + 'Pct');
+            const val = pd[k];
+            if (el) el.textContent = val > 0 ? Math.round(val) : '—';
+            if (pctEl && ftp && val > 0) pctEl.textContent = Math.round(val / ftp * 100) + '%FTP';
+        }
+
+        const elapsed = this.sess.elapsed();
+        const tss = this.ftpEst.getTSS(elapsed);
+        const kj = this.ftpEst.getEnergyKJ();
+        const wPrime = this.ftpEst.wPrimeRemaining;
+        const trimp = this.ftpEst.getTRIMP(elapsed);
+        document.getElementById('vTSS').textContent = tss != null ? Math.round(tss) : '—';
+        document.getElementById('vKJ').textContent = kj > 0 ? kj.toFixed(0) : '—';
+        document.getElementById('vWprime').textContent = wPrime != null ? Math.round(wPrime) + 'J' : '—';
+        document.getElementById('vTRIMP').textContent = trimp > 0 ? Math.round(trimp) : '—';
+
+        document.getElementById('vHr').textContent = hr != null ? Math.round(hr) : '—';
+        document.getElementById('vCad').textContent = cad != null ? Math.round(cad) : '—';
+        document.getElementById('vTrq').textContent = trq != null ? trq.toFixed(1) : '—';
+        document.getElementById('vAlpha').textContent = alpha != null ? alpha.toFixed(2) : '—';
+
+        document.getElementById('vSpd').textContent = sp != null ? (sp * 3.6).toFixed(1) : '0,0';
+        document.getElementById('vAlt').textContent = fa != null ? Math.round(fa) : '—';
+        document.getElementById('vGrd').textContent = gi ? (gi.g * 100).toFixed(1) : '0,0';
+        document.getElementById('vAcc').textContent = ac != null ? ac.toFixed(2) : '0,00';
+
+        document.getElementById('vTime').textContent = this._ft(elapsed);
+        document.getElementById('vDist').textContent = (this.sess.dist / 1000).toFixed(2) + ' km';
+        let vSum = 0, vCnt = 0, vMax = 0;
+        for (const s of samples) { if (s.spd_kmh != null) { vSum += s.spd_kmh; vCnt++; if (s.spd_kmh > vMax) vMax = s.spd_kmh; } }
+        document.getElementById('vVavg').textContent = vCnt > 0 ? (vSum / vCnt).toFixed(1) : '0,0';
+        document.getElementById('vVmax').textContent = vMax.toFixed(1);
+
+        if (pwr) {
+            const fp = w => (w >= 0 ? '+' : '') + Math.round(w) + ' W';
+            document.getElementById('cGrav').textContent = fp(pwr.pg);
+            document.getElementById('cRoll').textContent = fp(pwr.pr);
+            document.getElementById('cAero').textContent = fp(pwr.pa);
+            document.getElementById('cAccl').textContent = fp(pwr.pc);
+            const rowIner = document.getElementById('rowInertia');
+            const rowRes = document.getElementById('rowResist');
+            if (this.mode === 'indoor') {
+                rowIner.style.display = 'flex';
+                rowRes.style.display = 'flex';
+                document.getElementById('cIner').textContent = fp(pInertia);
+                document.getElementById('cResist').textContent = fp(pResist);
+            } else {
+                rowIner.style.display = 'none';
+                rowRes.style.display = 'none';
+            }
+            document.getElementById('cRaw').textContent = fp(pwr.raw);
+            document.getElementById('cEff').textContent = Math.round(C.effBike * 100) + '%';
+            document.getElementById('cFinal').textContent = fp(pwr.fin);
+        }
+
+        let rel = 100;
+        if (this.mode === 'indoor') {
+            if (hr == null) rel -= 40;
+            if (cad == null) rel -= 30;
+        } else {
+            if (s) {
+                if (s.accuracy > 20) rel -= 40;
+                else if (s.accuracy > 10) rel -= 20;
+                else if (s.accuracy > 5) rel -= 10;
+            }
+            if (sp == null) rel -= 30;
+            if (fa == null) rel -= 20;
+            if (gi && gi.cf < 0.5) rel -= 20;
+        }
+        rel = Math.max(0, Math.min(100, Math.round(rel)));
+        const re = document.getElementById('vRel');
+        re.textContent = rel + '%';
+        re.style.color = rel >= 70 ? 'var(--ok)' : rel >= 40 ? 'var(--warn)' : 'var(--err)';
+
+        const tb = document.getElementById('logBody');
+        const r = document.createElement('tr');
+        const phaseIcon = phase === 'acceleration' ? '🏃' : phase === 'deceleration' ? '⬇' : phase === 'steady' ? '💓' : phase === 'hybrid' ? '🔀' : '🌍';
+        const zoneName = zone != null ? 'Z' + (zone + 1) : '—';
+        r.innerHTML = `
+            <td>${this._ft(elapsed)}</td>
+            <td>${hr != null ? Math.round(hr) : '—'}</td>
+            <td>${cad != null ? Math.round(cad) : '—'}</td>
+            <td>${alpha != null ? alpha.toFixed(2) : '—'}</td>
+            <td>${sp != null ? (sp * 3.6).toFixed(1) : '—'}</td>
+            <td>${pf != null ? Math.round(Math.max(0, pf)) : '—'}</td>
+            <td>${pctFtp != null ? pctFtp.toFixed(0) + '%' : '—'}</td>
+            <td>${zoneName}</td>
+        `;
+        tb.insertBefore(r, tb.firstChild);
+        while (tb.children.length > 20) tb.removeChild(tb.lastChild);
+
+        if (document.getElementById('dbgPanel').classList.contains('vis')) {
+            this._updateDebug(ui);
+        }
+
+        this.chart.draw();
+    }
+
+    _updateDebug(ui) {
+        const { s, fa, sp, si, gi, ac, pwr, pf, hr, cad, alpha, trq, src, phase, pInertia, pResist, ftp, pctFtp, zone } = ui;
+        const ftmsStats = this.ftms.getStats();
+        const items = [
+            ['Modo', this.mode],
+            ['Fase', phase || '—'],
+            ['Fonte', src || '—'],
+            ['─────', '─────'],
+            ['FTMS Ativo', ftmsStats.active ? '✅ SIM' : '❌ NÃO'],
+            ['FTMS Suportado', ftmsStats.supported ? '✅ SIM' : '❌ NÃO'],
+            ['FTMS Pacotes', ftmsStats.packetsSent.toString()],
+            ['FTMS Potência', ftmsStats.currentPower + ' W'],
+            ['FTMS Cadência', ftmsStats.currentCadence + ' rpm'],
+            ['─────', '─────'],
+            ['HR raw', this.ble.hr ?? '—'],
+            ['HR filtrado', hr != null ? hr.toFixed(0) + ' bpm' : '—'],
+            ['Cad raw', this.ble.cadence != null ? this.ble.cadence.toFixed(0) : '—'],
+            ['Cad filtrada', cad != null ? cad.toFixed(0) + ' rpm' : '—'],
+            ['ω (rad/s)', cad != null ? (cad * 2 * Math.PI / 60).toFixed(2) : '—'],
+            ['α (rad/s²)', alpha != null ? alpha.toFixed(3) : '—'],
+            ['|α| > limiar?', Math.abs(alpha) > C.alphaThreshold ? '✅ SIM' : 'não'],
+            ['Torque τ', trq != null ? trq.toFixed(2) + ' N·m' : '—'],
+            ['─────', '─────'],
+            ['P_inércia', pInertia.toFixed(1) + ' W'],
+            ['P_resistência', pResist.toFixed(1) + ' W'],
+            ['P gravidade', pwr ? pwr.pg.toFixed(1) + ' W' : '—'],
+            ['P rolamento', pwr ? pwr.pr.toFixed(1) + ' W' : '—'],
+            ['P aero', pwr ? pwr.pa.toFixed(1) + ' W' : '—'],
+            ['P aceleração', pwr ? pwr.pc.toFixed(1) + ' W' : '—'],
+            ['P raw', pwr ? pwr.raw.toFixed(1) + ' W' : '—'],
+            ['P filtrada', pf != null ? pf.toFixed(1) + ' W' : '—'],
+            ['─────', '─────'],
+            ['FTP estimado', ftp != null ? Math.round(ftp) + ' W' : '—'],
+            ['%FTP atual', pctFtp != null ? pctFtp.toFixed(1) + ' %' : '—'],
+            ['Zona Coggan', zone != null ? 'Z' + (zone + 1) : '—'],
+            ['Lat', s ? s.latitude.toFixed(6) : '—'],
+            ['Lon', s ? s.longitude.toFixed(6) : '—'],
+            ['GPS acc', s ? s.accuracy.toFixed(1) + 'm' : '—']
+        ];
+        document.getElementById('dbgGrid').innerHTML = items.map(([l, v]) =>
+            `<div class="ditem"><span class="dlbl">${l}</span><span class="dval">${v}</span></div>`
+        ).join('');
+    }
+
+    _ft(s) {
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+
+    _uiTick() {
+        setInterval(() => {
+            if (this.sess.run || this.sess.pause) {
+                document.getElementById('vTime').textContent = this._ft(this.sess.elapsed());
+            }
+            // Atualiza status FTMS periodicamente
+            if (this.ftms.active) {
+                this._updateFTMSStatus();
+            }
+        }, 1000);
+    }
+
+    _finalStats() {
+        const samples = this.sess.samples;
+        const elapsed = this.sess.elapsed();
+        let pSum = 0, pMax = 0, pCnt = 0;
+        let vSum = 0, vMax = 0, vCnt = 0;
+        let hrSum = 0, hrCnt = 0;
+        for (const s of samples) {
+            if (s.filt != null) { pSum += s.filt; pCnt++; if (s.filt > pMax) pMax = s.filt; }
+            if (s.spd_kmh != null) { vSum += s.spd_kmh; vCnt++; if (s.spd_kmh > vMax) vMax = s.spd_kmh; }
+            if (s.hr != null) { hrSum += s.hr; hrCnt++; }
+        }
+        const ftp = this.ftpEst.currentFtp;
+        const tss = this.ftpEst.getTSS(elapsed);
+        const kj = this.ftpEst.getEnergyKJ();
+        const trimp = this.ftpEst.getTRIMP(elapsed);
+
+        const r = (l, v) => `<div class="brow"><span>${l}</span><span class="bval">${v}</span></div>`;
+        document.getElementById('finalContent').innerHTML =
+            r('Distância', (this.sess.dist / 1000).toFixed(2) + ' km') +
+            r('Tempo', this._ft(elapsed)) +
+            r('Vel média', vCnt > 0 ? (vSum / vCnt).toFixed(1) + ' km/h' : '—') +
+            r('Vel máx', vMax.toFixed(1) + ' km/h') +
+            r('Pot média', pCnt > 0 ? Math.round(pSum / pCnt) + ' W' : '—') +
+            r('Pot máx', Math.round(pMax) + ' W') +
+            r('FC média', hrCnt > 0 ? Math.round(hrSum / hrCnt) + ' bpm' : '—') +
+            r('─────', '─────') +
+            r('FTP estimado', ftp ? Math.round(ftp) + ' W' : '—') +
+            r('TSS', tss != null ? Math.round(tss) : '—') +
+            r('Energia', kj.toFixed(0) + ' kJ') +
+            r('TRIMP', Math.round(trimp)) +
+            r('W\' restante', Math.round(this.ftpEst.wPrimeRemaining) + ' J') +
+            r('─────', '─────') +
+            r('Z1 (Recup)', this._ft(this.ftpEst.zoneTime[0])) +
+            r('Z2 (Resistência)', this._ft(this.ftpEst.zoneTime[1])) +
+            r('Z3 (Tempo)', this._ft(this.ftpEst.zoneTime[2])) +
+            r('Z4 (Limiar)', this._ft(this.ftpEst.zoneTime[3])) +
+            r('Z5 (VO₂max)', this._ft(this.ftpEst.zoneTime[4])) +
+            r('Z6 (Anaeróbio)', this._ft(this.ftpEst.zoneTime[5])) +
+            r('Z7 (Neuromuscular)', this._ft(this.ftpEst.zoneTime[6]));
+        document.getElementById('finalStats').style.display = 'block';
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new App();
+    console.log('⚡ Medidor de Potência v3.1 - GPS + BLE + FTMS Broadcast');
+});
+</script>
+</body>
+</html>
