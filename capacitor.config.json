@@ -1,0 +1,6 @@
+{
+  "appId": "com.izpaes.powerblesmart",
+  "appName": "PowerBLE Smart",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

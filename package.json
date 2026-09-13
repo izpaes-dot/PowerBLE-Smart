@@ -1,0 +1,23 @@
+{
+  "name": "powerble-smart-android",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "prepare:android": "node scripts/prepare-android.mjs",
+    "android:sync": "npm run build && npx cap add android && npm run prepare:android && npx cap sync android",
+    "android:build": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "^7.2.1",
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/core": "^7.4.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
+    "vite": "^7.3.6"
+  }
+}

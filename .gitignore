@@ -1,0 +1,3 @@
+!native/
+!native/android/
+!native/android/*.kt
