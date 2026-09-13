@@ -1,21 +1,65 @@
 name: Build PowerBLE Smart APK
-on: {workflow_dispatch: null, push: {branches: [main, master]}}
-permissions: {contents: read}
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: npm}
-      - run: npm install
-      - run: npm run build
-      - run: npx cap add android
-      - run: npm run prepare:android
-      - run: npx cap sync android
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: 21}
-      - working-directory: android
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Web App
+        run: npm run build
+
+      - name: Add Android platform if needed
+        run: |
+          if [ -d "android" ]; then
+            echo "Android platform already exists."
+            echo "Skipping npx cap add android."
+          else
+            echo "Android platform does not exist."
+            echo "Adding Android platform..."
+            npx cap add android
+          fi
+
+      - name: Prepare Android
+        run: npm run prepare:android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Build Debug APK
+        working-directory: android
         run: ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
-        with: {name: PowerBLE-Smart-debug, path: android/app/build/outputs/apk/debug/app-debug.apk}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerBLE-Smart-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
