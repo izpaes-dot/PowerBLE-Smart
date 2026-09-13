@@ -1,7 +1,21 @@
-import fs from 'node:fs';import path from 'node:path';
-const r=process.cwd(),pkg='com/izpaes/powerblesmart',dst=path.join(r,'android/app/src/main/java',pkg);fs.mkdirSync(dst,{recursive:true});fs.copyFileSync('native/android/PowerBleNativePlugin.kt',path.join(dst,'PowerBleNativePlugin.kt'));
-const mf='android/app/src/main/AndroidManifest.xml';
-if(fs.existsSync(mf)){let m=fs.readFileSync(mf,'utf8');const p='\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n';if(!m.includes('BLUETOOTH_ADVERTISE'))m=m.replace('<application',p+'\n    <application');fs.writeFileSync(mf,m)}
-const f='android/app/src/main/java/com/izpaes/powerblesmart/MainActivity.kt';
-if(fs.existsSync(f)){let s=fs.readFileSync(f,'utf8');if(!s.includes('PowerBleNativePlugin')){s=s.replace(/package[^\n]+\n/,'$&\nimport android.Manifest\nimport android.os.Build\nimport android.os.Bundle\nimport com.izpaes.powerblesmart.PowerBleNativePlugin\n');s=s.replace(/class MainActivity\s*:\s*BridgeActivity\s*\{?/,`class MainActivity : BridgeActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        bridge?.registerPlugin(PowerBleNativePlugin::class.java)\n        val permissions = mutableListOf<String>()\n        if (Build.VERSION.SDK_INT >= 31) {\n            permissions += Manifest.permission.BLUETOOTH_SCAN\n            permissions += Manifest.permission.BLUETOOTH_CONNECT\n            permissions += Manifest.permission.BLUETOOTH_ADVERTISE\n        }\n        permissions += Manifest.permission.ACCESS_FINE_LOCATION\n        if (permissions.isNotEmpty()) requestPermissions(permissions.toTypedArray(), 7001)\n    }\n}`);fs.writeFileSync(f,s)}}
-console.log('PowerBLE native layer prepared.');
+import fs from 'node:fs';
+import path from 'node:path';
+
+const source = path.resolve('native/android/PowerBleNativePlugin.kt');
+
+const destination = path.resolve(
+  'android/app/src/main/java/com/izpaes/powerblesmart/PowerBleNativePlugin.kt'
+);
+
+const destinationDir = path.dirname(destination);
+
+if (!fs.existsSync(source)) {
+  throw new Error(`Arquivo nativo não encontrado: ${source}`);
+}
+
+fs.mkdirSync(destinationDir, { recursive: true });
+
+fs.copyFileSync(source, destination);
+
+console.log('✓ PowerBleNativePlugin.kt copiado para:');
+console.log(destination);
